@@ -25,6 +25,12 @@ class FrequencyCorrectorTests(unittest.TestCase):
     def test_corrects_screenshot_phrase(self) -> None:
         self.assertEqual(self.corrector.suggest("mes").replacement, "me")
 
+    def test_corrects_top_ranked_transposition(self) -> None:
+        correction = self.corrector.suggest("liek")
+        self.assertIsNotNone(correction)
+        assert correction is not None
+        self.assertEqual(correction.replacement, "like")
+
     def test_abstains_when_nearest_candidates_are_ambiguous(self) -> None:
         self.assertIsNone(self.corrector.suggest("wnat"))
         self.assertIsNone(self.corrector.suggest("candidatee"))

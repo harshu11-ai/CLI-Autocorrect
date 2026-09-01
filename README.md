@@ -1,8 +1,11 @@
 # CLI Autocorrect
 
-CLI Autocorrect is an experimental, local autocorrect layer for prompts typed
-into [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and the
-[Codex CLI](https://github.com/openai/codex).
+[![CI](https://github.com/harshu11-ai/CLI-Autocorrect/actions/workflows/ci.yml/badge.svg)](https://github.com/harshu11-ai/CLI-Autocorrect/actions/workflows/ci.yml)
+
+CLI Autocorrect fixes high-confidence typos while you type prompts in
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code) and the
+[Codex CLI](https://github.com/openai/codex). It runs locally and wraps the
+existing CLI—you keep using the normal Claude or Codex interface.
 
 ```text
 can you fix teh fucntion
@@ -10,108 +13,160 @@ can you fix teh fucntion
 can you fix the function
 ```
 
-The correction happens when a token is completed with Space or Enter.
-The child application receives ordinary backspace and replacement keystrokes,
-as though the user corrected the typo manually.
+Corrections happen after Space or Enter. The wrapped application receives
+ordinary backspace and replacement keystrokes, as if you corrected the word
+yourself.
 
-> [!WARNING]
-> This project is a pre-alpha PTY prototype. Use the explicit wrapper while its
-> terminal compatibility is being validated.
+## Features
 
-## Current scope
-
-- Claude Code and Codex CLI only
-- macOS and Linux
-- small, high-confidence English typo map
-- unique adjacent-character transpositions
-- unambiguous single extra-character mistakes
-- strict, local frequency-ranked spelling for broader mistakes
+- local English correction with no network requests or telemetry
+- built specifically for Claude Code and Codex CLI
+- common typo, transposition, extra-character, and high-confidence spelling fixes
 - protection for paths, URLs, flags, identifiers, and mixed alphanumeric terms
-- bracketed paste passed through unchanged
-- Backspace immediately after a correction restores the original token
-- no network requests, telemetry, or prompt storage
+- pasted text passed through unchanged
+- immediate Backspace to undo the last correction
+- optional personal corrections in a small JSON config file
+- transparent `--no-corrections` mode for terminal troubleshooting
 
-The token processor depends on a small `CorrectionEngine` interface. Curated
-rules handle immediate common mistakes while a local SymSpell frequency
-dictionary loads in the background for broader high-confidence corrections.
+## Requirements
 
-## Install for development
+- macOS or Linux
+- Python 3.10 or newer
+- Claude Code and/or Codex CLI already installed and available on `PATH`
 
-Python 3.10 or newer is required.
+## Install
+
+For a clean, isolated command-line installation, use
+[pipx](https://pipx.pypa.io/):
+
+```bash
+pipx install git+https://github.com/harshu11-ai/CLI-Autocorrect.git
+```
+
+Or install it in a virtual environment with pip:
 
 ```bash
 git clone https://github.com/harshu11-ai/CLI-Autocorrect.git
 cd CLI-Autocorrect
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e .
+python -m pip install .
 ```
+
+Verify the installation:
+
+```bash
+cli-autocorrect --doctor
+```
+
+The doctor reports the Python and platform versions, local dictionary status,
+config path, terminal status, and whether `claude` and `codex` are on `PATH`.
 
 ## Usage
 
-Run either supported application through the wrapper:
+Launch either supported application through the wrapper:
 
 ```bash
 cli-autocorrect claude
 cli-autocorrect codex
 ```
 
-Arguments after the application name are passed to it:
+Arguments after the application name are passed through unchanged:
 
 ```bash
 cli-autocorrect codex --model MODEL_NAME
 ```
 
-To test PTY behavior without modifying input:
+To test the PTY wrapper without changing any input:
 
 ```bash
 cli-autocorrect --no-corrections codex
 ```
 
-Transparent `claude` and `codex` shell integration will be added only after the
-explicit wrapper is reliable.
+Wrapper options such as `--config` and `--no-corrections` must come before the
+application name. Everything after `claude` or `codex` belongs to that app.
 
-## Compatibility
+## Personal corrections
 
-The PTY wrapper and correction rendering have been manually smoke-tested with:
+Create `~/.config/cli-autocorrect/config.json` to add corrections specific to
+your typing:
 
-- Codex CLI 0.151.0 on macOS
-- Claude Code 2.1.252 on macOS
+```json
+{
+  "corrections": {
+    "awsome": "awesome",
+    "reccomend": "recommend"
+  }
+}
+```
 
-Compatibility tests did not submit prompts or invoke a model.
+Keys and values must be different lowercase words containing only ASCII
+letters. Invalid configuration is reported clearly and prevents corrections
+from starting.
 
-## Safety policy
-
-The engine prefers a missed typo to an incorrect replacement. It currently
-abstains from correcting:
-
-- unknown or ambiguous words
-- pasted content
-- paths and URLs
-- command-line flags
-- `camelCase`, `snake_case`, and `kebab-case`
-- uppercase and mixed-alphanumeric tokens
-- the remainder of a line after cursor movement or an unknown escape sequence
-
-For example, `wnat` is not corrected because both “want” and “what” are
-plausible without sentence-level context.
-
-## Run tests
-
-The test suite uses only the Python standard library:
+Use another file for one session with:
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s tests -v
+cli-autocorrect --config /path/to/config.json claude
 ```
+
+On systems that set `XDG_CONFIG_HOME`, the default file is stored beneath that
+directory instead of `~/.config`.
+
+## Safety model
+
+CLI Autocorrect prefers missing a typo over changing code or technical terms.
+It does not correct:
+
+- pasted content
+- paths, URLs, email addresses, and command-line flags
+- `camelCase`, `snake_case`, and `kebab-case`
+- uppercase or mixed-alphanumeric tokens
+- ambiguous words without a clearly preferred correction
+- the rest of a line after cursor movement or an unknown terminal escape sequence
+
+For example, `wnat` remains unchanged because both “want” and “what” are
+plausible. Pressing Backspace immediately after a correction restores the
+original word.
+
+## Current boundaries
+
+This release corrects completed, lowercase English words. It intentionally does
+not rewrite grammar, split merged words such as `toteh`, repair misplaced spaces,
+or modify text that was pasted. Those changes need stronger context and more
+guardrails than ordinary spelling correction.
+
+The PTY wrapper has been smoke-tested with Codex CLI 0.151.0 and Claude Code
+2.1.252 on macOS. Compatibility is continuously tested on macOS and Linux, but
+interactive terminal behavior can still differ between terminal emulators.
+
+## Development
+
+Install the project and its development tools:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+```
+
+Run the same checks used by CI:
+
+```bash
+python -m ruff check .
+python -m unittest discover -s tests -v
+python -m build
+python -m twine check dist/*
+```
+
+The package uses a small correction-engine interface, so the spelling engine
+can be replaced without changing the terminal input processor.
 
 ## Privacy
 
-All processing happens in memory on the local machine. CLI Autocorrect makes no
-network requests and does not persist prompts, terminal output, environment
-variables, or source code.
+Prompts are processed in memory on the local machine. CLI Autocorrect does not
+store prompts, terminal output, environment variables, or source code.
 
-## Project status
+## License
 
-The current goal is to validate transparent terminal behavior in real Claude
-Code and Codex sessions. Broader spellchecking, personalized dictionaries, and
-automatic shell shims come after that feasibility gate.
+[MIT](LICENSE)

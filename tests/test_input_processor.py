@@ -21,6 +21,10 @@ class InputProcessorTests(unittest.TestCase):
         processor = InputProcessor()
         self.assertEqual(processor.feed(b"fix teh function"), b"fix teh\x7f\x7f\x7fthe function")
 
+    def test_rewrites_liek_at_space(self) -> None:
+        processor = InputProcessor()
+        self.assertEqual(processor.feed(b"something liek "), b"something liek\x7f\x7f\x7f\x7flike ")
+
     def test_preserves_punctuation_during_rewrite(self) -> None:
         processor = InputProcessor()
         self.assertEqual(
