@@ -25,7 +25,7 @@ yourself.
 - protection for paths, URLs, flags, identifiers, and mixed alphanumeric terms
 - pasted text passed through unchanged
 - immediate Backspace to undo the last correction
-- optional personal corrections in a small JSON config file
+- optional personal corrections and abbreviation expansions in a small JSON config file
 - transparent `--no-corrections` mode for terminal troubleshooting
 
 ## Requirements
@@ -77,7 +77,7 @@ Arguments after the application name are passed through unchanged:
 cli-autocorrect codex --model MODEL_NAME
 ```
 
-To test the PTY wrapper without changing any input:
+To test the PTY wrapper without corrections or abbreviation expansions:
 
 ```bash
 cli-autocorrect --no-corrections codex
@@ -86,23 +86,37 @@ cli-autocorrect --no-corrections codex
 Wrapper options such as `--config` and `--no-corrections` must come before the
 application name. Everything after `claude` or `codex` belongs to that app.
 
-## Personal corrections
+## Personal corrections and abbreviations
 
-Create `~/.config/cli-autocorrect/config.json` to add corrections specific to
-your typing:
+Create `~/.config/cli-autocorrect/config.json` to add spelling corrections and
+abbreviations specific to your typing:
 
 ```json
 {
   "corrections": {
     "awsome": "awesome",
     "reccomend": "recommend"
+  },
+  "abbreviations": {
+    "pr": "pull request",
+    "runt": "run the test suite",
+    "expfn": "explain this function step by step"
   }
 }
 ```
 
-Keys and values must be different lowercase words containing only ASCII
-letters. Invalid configuration is reported clearly and prevents corrections
-from starting.
+Typing `pr ` now inserts `pull request `. Abbreviations expand after Space or
+Enter, preserve trailing punctuation, and never recursively expand generated
+text. Immediate Backspace removes the expansion and restores its trigger.
+
+Correction keys and values, and abbreviation keys, must be lowercase words
+containing only ASCII letters. Abbreviation values may contain 1–500 printable
+ASCII characters, including spaces and punctuation, but cannot have surrounding
+spaces. A key cannot appear in both sections. Invalid configuration is reported
+clearly before the wrapped CLI starts.
+
+The wrapper inserts configured expansion text as keystrokes; it does not invoke
+a shell or interpret the expansion itself. Pasted abbreviations are not expanded.
 
 Use another file for one session with:
 
@@ -131,10 +145,11 @@ original word.
 
 ## Current boundaries
 
-This release corrects completed, lowercase English words. It intentionally does
-not rewrite grammar, split merged words such as `toteh`, repair misplaced spaces,
-or modify text that was pasted. Those changes need stronger context and more
-guardrails than ordinary spelling correction.
+This release corrects completed, lowercase English words and expands exact,
+user-defined lowercase abbreviation triggers. It intentionally does not rewrite
+grammar, split merged words such as `toteh`, repair misplaced spaces, or modify
+text that was pasted. Those changes need stronger context and more guardrails
+than ordinary spelling correction.
 
 The PTY wrapper has been smoke-tested with Codex CLI 0.151.0 and Claude Code
 2.1.252 on macOS. Compatibility is continuously tested on macOS and Linux, but

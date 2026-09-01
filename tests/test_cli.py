@@ -1,9 +1,11 @@
 import contextlib
 import io
 import unittest
+from pathlib import Path
 from unittest.mock import patch, sentinel
 
-from cli_autocorrect.cli import main
+from cli_autocorrect.cli import _run_doctor, main
+from cli_autocorrect.config import UserConfiguration
 
 
 class CliTests(unittest.TestCase):
@@ -23,6 +25,7 @@ class CliTests(unittest.TestCase):
         frequency_corrector.assert_called_once_with(
             background=True,
             custom_corrections={},
+            abbreviations={},
         )
         run_in_pty.assert_called_once_with(
             ["codex", "--model", "example"],
@@ -55,6 +58,33 @@ class CliTests(unittest.TestCase):
     def test_runs_doctor_without_application(self, run_doctor) -> None:
         self.assertEqual(main(["--doctor"]), 0)
         run_doctor.assert_called_once()
+
+    @patch("cli_autocorrect.cli.shutil.which", return_value=None)
+    @patch("cli_autocorrect.cli.FrequencyCorrector")
+    def test_doctor_reports_correction_and_abbreviation_counts(
+        self,
+        frequency_corrector,
+        _which,
+    ) -> None:
+        frequency_corrector.return_value.wait_until_ready.return_value = True
+        frequency_corrector.return_value.load_error = None
+        configuration = UserConfiguration(
+            path=Path("/tmp/config.json"),
+            corrections={"teh": "the"},
+            abbreviations={"pr": "pull request", "rt": "run tests"},
+            exists=True,
+        )
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            result = _run_doctor(configuration)
+
+        self.assertEqual(result, 0)
+        self.assertIn("1 personal corrections, 2 abbreviations", stdout.getvalue())
+        frequency_corrector.assert_called_once_with(
+            background=False,
+            custom_corrections={"teh": "the"},
+            abbreviations={"pr": "pull request", "rt": "run tests"},
+        )
 
 
 if __name__ == "__main__":
