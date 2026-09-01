@@ -1,5 +1,6 @@
 import unittest
 
+from cli_autocorrect.corrector import ConservativeCorrector
 from cli_autocorrect.input_processor import (
     BRACKETED_PASTE_END,
     BRACKETED_PASTE_START,
@@ -37,6 +38,34 @@ class InputProcessorTests(unittest.TestCase):
         processor.feed(b"teh ")
         self.assertEqual(processor.feed(b"\x7f"), b"\x7f\x7f\x7f\x7fteh")
         self.assertEqual(processor.feed(b" "), b"\x7f\x7f\x7fthe ")
+
+    def test_expands_abbreviation_and_backspace_restores_trigger(self) -> None:
+        corrector = ConservativeCorrector(abbreviations={"pr": "pull request"})
+        processor = InputProcessor(corrector)
+        self.assertEqual(
+            processor.feed(b"pr "),
+            b"pr\x7f\x7fpull request ",
+        )
+        self.assertEqual(
+            processor.feed(b"\x7f"),
+            b"\x7f" + (b"\x7f" * len(b"pull request")) + b"pr",
+        )
+
+    def test_expansion_is_not_processed_recursively(self) -> None:
+        corrector = ConservativeCorrector(abbreviations={"a": "b", "b": "expanded"})
+        processor = InputProcessor(corrector)
+        self.assertEqual(processor.feed(b"a "), b"a\x7fb ")
+
+    def test_expands_abbreviation_before_enter(self) -> None:
+        corrector = ConservativeCorrector(abbreviations={"rt": "run tests"})
+        processor = InputProcessor(corrector)
+        self.assertEqual(processor.feed(b"rt\n"), b"rt\x7f\x7frun tests\n")
+
+    def test_does_not_expand_abbreviation_inside_paste(self) -> None:
+        corrector = ConservativeCorrector(abbreviations={"pr": "pull request"})
+        processor = InputProcessor(corrector)
+        pasted = BRACKETED_PASTE_START + b"pr " + BRACKETED_PASTE_END
+        self.assertEqual(processor.feed(pasted), pasted)
 
     def test_editing_word_with_backspace_updates_buffer(self) -> None:
         processor = InputProcessor()

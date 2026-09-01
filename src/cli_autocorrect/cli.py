@@ -18,7 +18,7 @@ SUPPORTED_APPS = {"claude", "codex"}
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cli-autocorrect",
-        description="Run Claude Code or Codex with conservative local autocorrect.",
+        description="Run Claude Code or Codex with local autocorrect and text expansion.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument(
@@ -29,7 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--config",
         metavar="PATH",
-        help="load personal corrections from PATH instead of the default config file",
+        help="load personal corrections and abbreviations from PATH",
     )
     parser.add_argument(
         "--doctor",
@@ -75,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
         corrector = FrequencyCorrector(
             background=True,
             custom_corrections=configuration.corrections,
+            abbreviations=configuration.abbreviations,
         )
 
     try:
@@ -108,13 +109,15 @@ def _run_doctor(configuration: UserConfiguration) -> int:
     corrector = FrequencyCorrector(
         background=False,
         custom_corrections=configuration.corrections,
+        abbreviations=configuration.abbreviations,
     )
     dictionary_ready = corrector.wait_until_ready(0)
-    config_status = (
-        f"loaded ({len(configuration.corrections)} personal corrections)"
-        if configuration.exists
-        else "not created (using built-in defaults)"
-    )
+    config_status = "not created (using built-in defaults)"
+    if configuration.exists:
+        config_status = (
+            f"loaded ({len(configuration.corrections)} personal corrections, "
+            f"{len(configuration.abbreviations)} abbreviations)"
+        )
 
     print(f"CLI Autocorrect: {__version__}")
     print(f"Python: {platform.python_version()}")

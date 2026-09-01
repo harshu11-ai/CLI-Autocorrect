@@ -117,10 +117,15 @@ class CorrectionEngine(Protocol):
 
 
 class ConservativeCorrector:
-    """Correct only explicit typos and unique adjacent transpositions."""
+    """Apply explicit mappings and conservative context-free corrections."""
 
-    def __init__(self, custom_corrections: Mapping[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        custom_corrections: Mapping[str, str] | None = None,
+        abbreviations: Mapping[str, str] | None = None,
+    ) -> None:
         self.typos = {**COMMON_TYPOS, **(custom_corrections or {})}
+        self.abbreviations = dict(abbreviations or {})
 
     def suggest(self, token: str) -> Correction | None:
         """Return a correction for a complete token, or abstain."""
@@ -135,8 +140,11 @@ class ConservativeCorrector:
         if not word.islower():
             return None
 
-        replacement = self.typos.get(word)
-        reason = "common typo"
+        replacement = self.abbreviations.get(word)
+        reason = "personal abbreviation"
+        if replacement is None:
+            replacement = self.typos.get(word)
+            reason = "common typo"
         if replacement is None:
             replacement = self._unique_transposition(word)
             reason = "adjacent transposition"
@@ -211,8 +219,9 @@ class FrequencyCorrector:
         *,
         background: bool = True,
         custom_corrections: Mapping[str, str] | None = None,
+        abbreviations: Mapping[str, str] | None = None,
     ) -> None:
-        self.rules = ConservativeCorrector(custom_corrections)
+        self.rules = ConservativeCorrector(custom_corrections, abbreviations)
         self._sym_spell: object | None = None
         self._ready = Event()
         self._load_error: Exception | None = None

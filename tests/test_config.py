@@ -22,22 +22,37 @@ class ConfigurationTests(unittest.TestCase):
             configuration = load_configuration(Path(directory) / "missing.json")
         self.assertFalse(configuration.exists)
         self.assertEqual(configuration.corrections, {})
+        self.assertEqual(configuration.abbreviations, {})
 
-    def test_loads_personal_corrections(self) -> None:
+    def test_loads_personal_corrections_and_abbreviations(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
             path.write_text(
-                json.dumps({"corrections": {"awsome": "awesome"}}),
+                json.dumps(
+                    {
+                        "corrections": {"awsome": "awesome"},
+                        "abbreviations": {"pr": "pull request (PR)"},
+                    }
+                ),
                 encoding="utf-8",
             )
             configuration = load_configuration(path)
 
         self.assertTrue(configuration.exists)
         self.assertEqual(configuration.corrections, {"awsome": "awesome"})
-        correction = ConservativeCorrector(configuration.corrections).suggest("awsome")
+        self.assertEqual(configuration.abbreviations, {"pr": "pull request (PR)"})
+        corrector = ConservativeCorrector(
+            configuration.corrections,
+            configuration.abbreviations,
+        )
+        correction = corrector.suggest("awsome")
         self.assertIsNotNone(correction)
         assert correction is not None
         self.assertEqual(correction.replacement, "awesome")
+        expansion = corrector.suggest("pr")
+        self.assertIsNotNone(expansion)
+        assert expansion is not None
+        self.assertEqual(expansion.replacement, "pull request (PR)")
 
     def test_reports_invalid_json_location(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -66,6 +81,43 @@ class ConfigurationTests(unittest.TestCase):
                 path.write_text(json.dumps({"corrections": mapping}), encoding="utf-8")
                 with self.assertRaises(ConfigurationError):
                     load_configuration(path)
+
+    def test_rejects_unsafe_abbreviations(self) -> None:
+        invalid_mappings = (
+            {"PR": "pull request"},
+            {"pr": ""},
+            {"pr": " pull request"},
+            {"pr": "pull request "},
+            {"pr": "pr"},
+            {"pr": "pull\nrequest"},
+            {"pr": "café"},
+            {"pr": "x" * 501},
+            {"pr": 42},
+        )
+        for mapping in invalid_mappings:
+            with self.subTest(mapping=mapping), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "config.json"
+                path.write_text(json.dumps({"abbreviations": mapping}), encoding="utf-8")
+                with self.assertRaises(ConfigurationError):
+                    load_configuration(path)
+
+    def test_rejects_key_shared_by_correction_and_abbreviation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "corrections": {"pr": "per"},
+                        "abbreviations": {"pr": "pull request"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                ConfigurationError,
+                "both a correction and an abbreviation",
+            ):
+                load_configuration(path)
 
 
 if __name__ == "__main__":

@@ -41,6 +41,24 @@ class ConservativeCorrectorTests(unittest.TestCase):
         self.assertEqual(correction.replacement, "fix")
         self.assertEqual(correction.reason, "single extra character")
 
+    def test_expands_personal_abbreviation_with_punctuation(self) -> None:
+        corrector = ConservativeCorrector(abbreviations={"pr": "pull request (PR)"})
+        correction = corrector.suggest("pr,")
+        self.assertIsNotNone(correction)
+        assert correction is not None
+        self.assertEqual(correction.replacement, "pull request (PR),")
+        self.assertEqual(correction.reason, "personal abbreviation")
+
+    def test_personal_abbreviation_takes_priority_over_spelling(self) -> None:
+        corrector = ConservativeCorrector(
+            custom_corrections={"teh": "the"},
+            abbreviations={"teh": "technical explanation here"},
+        )
+        correction = corrector.suggest("teh")
+        self.assertIsNotNone(correction)
+        assert correction is not None
+        self.assertEqual(correction.replacement, "technical explanation here")
+
     def test_abstains_from_ambiguous_typo(self) -> None:
         self.assertIsNone(self.corrector.suggest("wnat"))
 
