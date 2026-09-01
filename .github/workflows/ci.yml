@@ -4,17 +4,70 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    name: Test (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        python-version: ["3.10", "3.13"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.10"
+          - os: ubuntu-latest
+            python-version: "3.14"
+          - os: macos-latest
+            python-version: "3.14"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - run: python -m pip install .
-      - run: python -m unittest discover -s tests -v
+          cache: pip
+      - name: Install package
+        run: python -m pip install .
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+
+  quality:
+    name: Lint and verify package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+      - name: Install development tools
+        run: python -m pip install ".[dev]"
+      - name: Lint
+        run: python -m ruff check .
+      - name: Build wheel and source distribution
+        run: python -m build
+      - name: Validate package metadata
+        run: python -m twine check dist/*
+      - name: Smoke-test built wheel
+        run: |
+          python -m venv /tmp/cli-autocorrect-wheel-test
+          /tmp/cli-autocorrect-wheel-test/bin/pip install dist/*.whl
+          /tmp/cli-autocorrect-wheel-test/bin/cli-autocorrect --version
+          /tmp/cli-autocorrect-wheel-test/bin/cli-autocorrect --doctor
+      - name: Upload distributions
+        uses: actions/upload-artifact@v5
+        with:
+          name: cli-autocorrect-distributions
+          path: dist/
+          if-no-files-found: error

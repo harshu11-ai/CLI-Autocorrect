@@ -1,29 +1,42 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "cli-autocorrect"
-version = "0.1.0.dev0"
+dynamic = ["version"]
 description = "Conservative, local autocorrect for Claude Code and Codex CLI prompts"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
+license-files = ["LICENSE"]
 authors = [
   { name = "Harshith Yallampalli" },
 ]
 keywords = ["autocorrect", "terminal", "claude-code", "codex", "cli"]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 3 - Alpha",
   "Environment :: Console",
   "Operating System :: MacOS",
   "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Programming Language :: Python :: 3 :: Only",
   "Topic :: Terminals",
 ]
 dependencies = [
   "symspellpy>=6.10,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2",
+  "ruff>=0.8",
+  "twine>=5",
 ]
 
 [project.scripts]
@@ -36,6 +49,9 @@ Issues = "https://github.com/harshu11-ai/CLI-Autocorrect/issues"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
+
+[tool.setuptools.dynamic]
+version = { attr = "cli_autocorrect.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

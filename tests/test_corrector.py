@@ -27,6 +27,13 @@ class ConservativeCorrectorTests(unittest.TestCase):
         self.assertEqual(correction.replacement, "what")
         self.assertEqual(correction.reason, "adjacent transposition")
 
+    def test_corrects_liek_immediately_without_dictionary(self) -> None:
+        correction = self.corrector.suggest("liek")
+        self.assertIsNotNone(correction)
+        assert correction is not None
+        self.assertEqual(correction.replacement, "like")
+        self.assertEqual(correction.reason, "adjacent transposition")
+
     def test_removes_one_unambiguous_extra_character(self) -> None:
         correction = self.corrector.suggest("gfix")
         self.assertIsNotNone(correction)

@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib.resources import files
 from threading import Event, Thread
 from typing import Protocol
 
-# This list is intentionally small. A false correction inside a coding prompt is
-# more harmful than a typo that is left alone.
 COMMON_TYPOS: dict[str, str] = {
     "acheive": "achieve",
     "adress": "address",
@@ -30,8 +29,6 @@ COMMON_TYPOS: dict[str, str] = {
     "teh": "the",
 }
 
-# Enough vocabulary to support obvious adjacent transpositions without turning
-# this first release into a broad spellchecker.
 COMMON_WORDS = {
     "about",
     "after",
@@ -53,6 +50,7 @@ COMMON_WORDS = {
     "function",
     "have",
     "into",
+    "like",
     "make",
     "need",
     "other",
@@ -80,6 +78,27 @@ _TOKEN_PARTS = re.compile(r"^([^A-Za-z]*)([A-Za-z]+)([^A-Za-z]*)$")
 _URL_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
 
 
+def _is_adjacent_transposition(original: str, candidate: str) -> bool:
+    """Return whether candidate swaps exactly one neighboring character pair."""
+    if len(original) != len(candidate) or original == candidate:
+        return False
+
+    differences = [
+        index
+        for index, (left, right) in enumerate(zip(original, candidate, strict=True))
+        if left != right
+    ]
+    if len(differences) != 2:
+        return False
+
+    first, second = differences
+    return (
+        second == first + 1
+        and original[first] == candidate[second]
+        and original[second] == candidate[first]
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class Correction:
     """A replacement selected by the correction engine."""
@@ -100,6 +119,9 @@ class CorrectionEngine(Protocol):
 class ConservativeCorrector:
     """Correct only explicit typos and unique adjacent transpositions."""
 
+    def __init__(self, custom_corrections: Mapping[str, str] | None = None) -> None:
+        self.typos = {**COMMON_TYPOS, **(custom_corrections or {})}
+
     def suggest(self, token: str) -> Correction | None:
         """Return a correction for a complete token, or abstain."""
         if self._looks_technical(token):
@@ -113,7 +135,7 @@ class ConservativeCorrector:
         if not word.islower():
             return None
 
-        replacement = COMMON_TYPOS.get(word)
+        replacement = self.typos.get(word)
         reason = "common typo"
         if replacement is None:
             replacement = self._unique_transposition(word)
@@ -184,8 +206,13 @@ class FrequencyCorrector:
     MINIMUM_CANDIDATE_COUNT = 1_000_000
     MINIMUM_FREQUENCY_MARGIN = 10
 
-    def __init__(self, *, background: bool = True) -> None:
-        self.rules = ConservativeCorrector()
+    def __init__(
+        self,
+        *,
+        background: bool = True,
+        custom_corrections: Mapping[str, str] | None = None,
+    ) -> None:
+        self.rules = ConservativeCorrector(custom_corrections)
         self._sym_spell: object | None = None
         self._ready = Event()
         self._load_error: Exception | None = None
@@ -231,13 +258,22 @@ class FrequencyCorrector:
         best = nearest[0]
         if best.count < self.MINIMUM_CANDIDATE_COUNT:
             return None
-        if len(nearest) > 1 and best.count < nearest[1].count * self.MINIMUM_FREQUENCY_MARGIN:
+        top_ranked_transposition = _is_adjacent_transposition(word, best.term)
+        if (
+            not top_ranked_transposition
+            and len(nearest) > 1
+            and best.count < nearest[1].count * self.MINIMUM_FREQUENCY_MARGIN
+        ):
             return None
 
         return Correction(
             original=token,
             replacement=f"{prefix}{best.term}{suffix}",
-            reason="frequency-ranked spelling",
+            reason=(
+                "frequency-ranked transposition"
+                if top_ranked_transposition
+                else "frequency-ranked spelling"
+            ),
         )
 
     def wait_until_ready(self, timeout: float | None = None) -> bool:
