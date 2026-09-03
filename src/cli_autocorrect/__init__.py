@@ -1,3 +1,3 @@
 """Local terminal autocorrect for Claude Code and Codex CLI."""
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"

@@ -70,7 +70,7 @@ class CliTests(unittest.TestCase):
             result = main(["update"])
 
         self.assertEqual(result, 0)
-        self.assertIn("Updated cli-autocorrect 0.2.1 -> 0.2.2.", stdout.getvalue())
+        self.assertIn("Updated cauto 0.2.1 -> 0.2.2.", stdout.getvalue())
         update_with_pipx.assert_called_once_with()
 
     @patch(
@@ -83,7 +83,7 @@ class CliTests(unittest.TestCase):
             result = main(["update"])
 
         self.assertEqual(result, 0)
-        self.assertIn("Reinstalled cli-autocorrect 0.2.2.", stdout.getvalue())
+        self.assertIn("Reinstalled cauto 0.2.2.", stdout.getvalue())
 
     @patch(
         "cli_autocorrect.cli.update_with_pipx",

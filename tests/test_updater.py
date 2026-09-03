@@ -7,7 +7,7 @@ from cli_autocorrect.updater import UPDATE_SOURCE, UpdateError, update_with_pipx
 
 PIPX = "/usr/local/bin/pipx"
 ACTIVE_ENVIRONMENT = "/example/pipx/venvs/cli-autocorrect"
-APP_PATH = f"{ACTIVE_ENVIRONMENT}/bin/cli-autocorrect"
+APP_PATH = f"{ACTIVE_ENVIRONMENT}/bin/cauto"
 
 
 def pipx_listing(version: str = "0.2.1", app_path: object = APP_PATH) -> str:

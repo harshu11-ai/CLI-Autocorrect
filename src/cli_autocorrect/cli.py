@@ -18,7 +18,7 @@ SUPPORTED_APPS = {"claude", "codex"}
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="cli-autocorrect",
+        prog="cauto",
         description="Run Claude Code or Codex with local autocorrect and text expansion.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -93,10 +93,10 @@ def main(argv: list[str] | None = None) -> int:
             corrector=corrector,
         )
     except TerminalRequiredError as error:
-        print(f"cli-autocorrect: {error}", file=sys.stderr)
+        print(f"cauto: {error}", file=sys.stderr)
         return 2
     except OSError as error:
-        print(f"cli-autocorrect: terminal I/O failed: {error}", file=sys.stderr)
+        print(f"cauto: terminal I/O failed: {error}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         return 130
@@ -109,7 +109,7 @@ def _load_configuration(path: str | None) -> UserConfiguration | None:
             raise ConfigurationError(f"configuration file does not exist: {configuration.path}")
         return configuration
     except ConfigurationError as error:
-        print(f"cli-autocorrect: {error}", file=sys.stderr)
+        print(f"cauto: {error}", file=sys.stderr)
         return None
 
 
@@ -147,18 +147,18 @@ def _run_doctor(configuration: UserConfiguration) -> int:
 
 
 def _run_update() -> int:
-    print("Updating cli-autocorrect from GitHub with pipx...")
+    print("Updating cauto from GitHub with pipx...")
     try:
         result = update_with_pipx()
     except UpdateError as error:
-        print(f"cli-autocorrect: update failed: {error}", file=sys.stderr)
+        print(f"cauto: update failed: {error}", file=sys.stderr)
         return 1
 
     if result.previous_version == result.current_version:
-        print(f"Reinstalled cli-autocorrect {result.current_version}.")
+        print(f"Reinstalled cauto {result.current_version}.")
     else:
         print(
-            f"Updated cli-autocorrect {result.previous_version} -> {result.current_version}."
+            f"Updated cauto {result.previous_version} -> {result.current_version}."
         )
     return 0
 

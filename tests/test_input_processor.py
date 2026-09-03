@@ -71,6 +71,26 @@ class InputProcessorTests(unittest.TestCase):
         processor = InputProcessor()
         self.assertEqual(processor.feed(b"tehh\x7f "), b"tehh\x7f\x7f\x7f\x7fthe ")
 
+    def test_ctrl_h_word_erase_resets_buffer(self) -> None:
+        processor = InputProcessor()
+        self.assertEqual(
+            processor.feed(b"teh\x08teh "),
+            b"teh\x08teh\x7f\x7f\x7fthe ",
+        )
+
+    def test_ctrl_w_word_erase_resets_buffer(self) -> None:
+        processor = InputProcessor()
+        self.assertEqual(
+            processor.feed(b"teh\x17teh "),
+            b"teh\x17teh\x7f\x7f\x7fthe ",
+        )
+
+    def test_ctrl_backspace_does_not_trigger_autocorrect_undo(self) -> None:
+        processor = InputProcessor()
+        processor.feed(b"teh ")
+        self.assertEqual(processor.feed(b"\x08"), b"\x08")
+        self.assertEqual(processor.feed(b"teh "), b"teh\x7f\x7f\x7fthe ")
+
     def test_path_is_passed_through(self) -> None:
         processor = InputProcessor()
         value = b"src/teh.py "
@@ -180,10 +200,35 @@ class InputProcessorTests(unittest.TestCase):
         )
         self.assertEqual(processor.feed(b"\nteh "), b"\nteh\x7f\x7f\x7fthe ")
 
+    def test_enhanced_word_erase_resets_buffer(self) -> None:
+        sequences = (
+            b"\x1b[127;5u",  # Kitty Ctrl-Backspace
+            b"\x1b[8;5u",  # alternate Kitty Ctrl-Backspace
+            b"\x1b[127;3u",  # Kitty Option-Backspace
+            b"\x1b[119;5u",  # Kitty Ctrl-W
+            b"\x1b[27;5;127~",  # xterm Ctrl-Backspace
+            b"\x1b[27;3;127~",  # xterm Option-Backspace
+        )
+        for sequence in sequences:
+            with self.subTest(sequence=sequence):
+                processor = InputProcessor()
+                self.assertEqual(
+                    processor.feed(b"teh" + sequence + b"teh "),
+                    b"teh" + sequence + b"teh\x7f\x7f\x7fthe ",
+                )
+
+    def test_legacy_option_backspace_resets_buffer(self) -> None:
+        processor = InputProcessor()
+        word_erase = b"\x1b\x7f"
+        self.assertEqual(
+            processor.feed(b"teh" + word_erase + b"teh "),
+            b"teh" + word_erase + b"teh\x7f\x7f\x7fthe ",
+        )
+
     def test_unknown_enhanced_editing_key_still_suspends_correction(self) -> None:
         processor = InputProcessor()
-        ctrl_w = b"\x1b[119;5u"
-        self.assertEqual(processor.feed(b"teh" + ctrl_w + b"teh "), b"teh" + ctrl_w + b"teh ")
+        ctrl_k = b"\x1b[107;5u"
+        self.assertEqual(processor.feed(b"teh" + ctrl_k + b"teh "), b"teh" + ctrl_k + b"teh ")
         self.assertEqual(processor.feed(b"\nteh "), b"\nteh\x7f\x7f\x7fthe ")
 
     def test_tab_is_passed_through_and_suspends_correction(self) -> None:
