@@ -107,6 +107,85 @@ class InputProcessorTests(unittest.TestCase):
         processor.feed(b"\x1b[A")
         self.assertEqual(processor.feed(b"teh \x03teh "), b"teh \x03teh\x7f\x7f\x7fthe ")
 
+    def test_enhanced_ctrl_c_resets_safe_typing_state(self) -> None:
+        processor = InputProcessor()
+        processor.feed(b"\x1b[A")
+        ctrl_c = b"\x1b[99;5u"
+        self.assertEqual(
+            processor.feed(b"teh " + ctrl_c + b"teh "),
+            b"teh " + ctrl_c + b"teh\x7f\x7f\x7fthe ",
+        )
+
+    def test_enhanced_ctrl_c_release_does_not_disable_correction(self) -> None:
+        processor = InputProcessor()
+        ctrl_c_press_and_release = b"\x1b[99;5u\x1b[99;5:3u"
+        self.assertEqual(
+            processor.feed(ctrl_c_press_and_release + b"teh "),
+            ctrl_c_press_and_release + b"teh\x7f\x7f\x7fthe ",
+        )
+
+    def test_enhanced_ctrl_d_resets_safe_typing_state(self) -> None:
+        processor = InputProcessor()
+        processor.feed(b"\x1b[A")
+        ctrl_d = b"\x1b[100;5u"
+        self.assertEqual(
+            processor.feed(ctrl_d + b"teh "),
+            ctrl_d + b"teh\x7f\x7f\x7fthe ",
+        )
+
+    def test_enhanced_escape_resets_safe_typing_state(self) -> None:
+        processor = InputProcessor()
+        processor.feed(b"\x1b[A")
+        escape = b"\x1b[27u"
+        self.assertEqual(
+            processor.feed(escape + b"teh "),
+            escape + b"teh\x7f\x7f\x7fthe ",
+        )
+
+    def test_legacy_shift_tab_preserves_typing_state(self) -> None:
+        processor = InputProcessor()
+        shift_tab = b"\x1b[Z"
+        self.assertEqual(
+            processor.feed(b"teh" + shift_tab + b" "),
+            b"teh" + shift_tab + b"\x7f\x7f\x7fthe ",
+        )
+
+    def test_enhanced_shift_tab_events_preserve_typing_state(self) -> None:
+        processor = InputProcessor()
+        shift_tab_press_and_release = b"\x1b[9;2u\x1b[9;2:3u"
+        self.assertEqual(
+            processor.feed(b"teh" + shift_tab_press_and_release + b" "),
+            b"teh" + shift_tab_press_and_release + b"\x7f\x7f\x7fthe ",
+        )
+
+    def test_claude_mouse_motion_preserves_typing_state(self) -> None:
+        processor = InputProcessor()
+        mouse_motion = b"\x1b[<35;80;24M"
+        self.assertEqual(
+            processor.feed(b"teh" + mouse_motion + b" "),
+            b"teh" + mouse_motion + b"\x7f\x7f\x7fthe ",
+        )
+
+    def test_claude_mouse_motion_split_across_reads_preserves_typing_state(self) -> None:
+        processor = InputProcessor()
+        self.assertEqual(processor.feed(b"teh\x1b[<35;"), b"teh\x1b[<35;")
+        self.assertEqual(processor.feed(b"80;24M "), b"80;24M\x7f\x7f\x7fthe ")
+
+    def test_claude_mouse_click_still_suspends_correction(self) -> None:
+        processor = InputProcessor()
+        mouse_click = b"\x1b[<0;80;24M"
+        self.assertEqual(
+            processor.feed(b"teh" + mouse_click + b"teh "),
+            b"teh" + mouse_click + b"teh ",
+        )
+        self.assertEqual(processor.feed(b"\nteh "), b"\nteh\x7f\x7f\x7fthe ")
+
+    def test_unknown_enhanced_editing_key_still_suspends_correction(self) -> None:
+        processor = InputProcessor()
+        ctrl_w = b"\x1b[119;5u"
+        self.assertEqual(processor.feed(b"teh" + ctrl_w + b"teh "), b"teh" + ctrl_w + b"teh ")
+        self.assertEqual(processor.feed(b"\nteh "), b"\nteh\x7f\x7f\x7fthe ")
+
     def test_tab_is_passed_through_and_suspends_correction(self) -> None:
         processor = InputProcessor()
         self.assertEqual(processor.feed(b"teh\tteh "), b"teh\tteh ")

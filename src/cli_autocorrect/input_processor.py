@@ -12,6 +12,8 @@ RESET_BYTES = {0x03, 0x04, 0x0A, 0x0D}  # Ctrl-C, Ctrl-D, LF, CR
 BOUNDARY_BYTES = {0x0A, 0x0D, 0x20}  # LF, CR, space
 BRACKETED_PASTE_START = b"\x1b[200~"
 BRACKETED_PASTE_END = b"\x1b[201~"
+KITTY_SHIFT = 1
+KITTY_CTRL = 4
 
 
 @dataclass(slots=True)
@@ -69,10 +71,11 @@ class InputProcessor:
                 continue
 
             if byte < 0x20:
-                self._invalidate_line()
                 output.append(byte)
                 if byte in RESET_BYTES:
-                    self.safe_to_correct = True
+                    self._reset_line()
+                else:
+                    self._invalidate_line()
                 continue
 
             output.append(byte)
@@ -136,6 +139,11 @@ class InputProcessor:
         self.token.clear()
         self.last_correction = None
 
+    def _reset_line(self) -> None:
+        self.safe_to_correct = True
+        self.token.clear()
+        self.last_correction = None
+
     def _track_escape(self, byte: int) -> None:
         self._escape_candidate.append(byte)
         candidate = bytes(self._escape_candidate)
@@ -151,7 +159,13 @@ class InputProcessor:
 
         if candidate.startswith(b"\x1b["):
             if self._csi_is_complete(candidate):
-                if not self._is_terminal_report(candidate):
+                if self._is_enhanced_line_reset(candidate):
+                    self._reset_line()
+                elif not (
+                    self._is_terminal_report(candidate)
+                    or self._is_safe_mode_key(candidate)
+                    or self._is_mouse_motion(candidate)
+                ):
                     self._invalidate_line()
                 self._escape_candidate.clear()
             elif len(candidate) >= 64:
@@ -206,6 +220,59 @@ class InputProcessor:
         if final == b"u":  # keyboard protocol capability report
             return parameters[:1] in {b"?", b">"}
         return False
+
+    @classmethod
+    def _is_enhanced_line_reset(cls, candidate: bytes) -> bool:
+        """Recognize Kitty-protocol keys that abandon or finish the current input."""
+        key = cls._kitty_key(candidate)
+        if key is None:
+            return False
+        key_code, modifiers = key
+        return key_code == ESCAPE or (key_code in {ord("c"), ord("d")} and modifiers & KITTY_CTRL)
+
+    @classmethod
+    def _is_safe_mode_key(cls, candidate: bytes) -> bool:
+        """Recognize mode-switching keys that do not edit the prompt text."""
+        if candidate in {b"\x1b[Z", b"\x1b[1;2Z"}:  # legacy Shift-Tab
+            return True
+
+        key = cls._kitty_key(candidate)
+        if key is None:
+            return False
+        key_code, modifiers = key
+        return key_code == 0x09 and modifiers == KITTY_SHIFT
+
+    @staticmethod
+    def _is_mouse_motion(candidate: bytes) -> bool:
+        """Recognize SGR mouse motion reports, which cannot edit prompt text."""
+        if not candidate.startswith(b"\x1b[<") or not candidate.endswith(b"M"):
+            return False
+
+        fields = candidate[3:-1].split(b";")
+        if len(fields) != 3 or not all(field.isdigit() for field in fields):
+            return False
+
+        button_code = int(fields[0])
+        return bool(button_code & 0x20)
+
+    @staticmethod
+    def _kitty_key(candidate: bytes) -> tuple[int, int] | None:
+        """Parse the key code and modifier bitset from a Kitty CSI-u event."""
+        if not candidate.startswith(b"\x1b[") or not candidate.endswith(b"u"):
+            return None
+
+        fields = candidate[2:-1].split(b";")
+        if not fields or fields[0][:1] in {b"?", b">", b"="}:
+            return None
+
+        key_code = fields[0].split(b":", 1)[0]
+        modifier = fields[1].split(b":", 1)[0] if len(fields) > 1 else b"1"
+        if not key_code.isdigit() or not modifier.isdigit():
+            return None
+
+        # Kitty encodes modifiers as one plus a bitset. The optional event type
+        # follows a colon, so press, repeat, and release events parse identically.
+        return int(key_code), max(int(modifier) - 1, 0)
 
     def _track_paste_end(self, byte: int) -> None:
         candidate = self._paste_end_candidate
