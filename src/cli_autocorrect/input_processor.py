@@ -154,6 +154,11 @@ class InputProcessor:
     def _track_escape(self, byte: int) -> None:
         self._escape_candidate.append(byte)
         candidate = bytes(self._escape_candidate)
+        if candidate == b"\x1b\x1b":
+            self._reset_line()
+            self._escape_candidate.clear()
+            return
+
         if candidate == BRACKETED_PASTE_START:
             self._invalidate_line()
             self.in_paste = True

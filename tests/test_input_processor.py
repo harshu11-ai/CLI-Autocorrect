@@ -162,6 +162,36 @@ class InputProcessorTests(unittest.TestCase):
             escape + b"teh\x7f\x7f\x7fthe ",
         )
 
+    def test_legacy_double_escape_resets_typing_state(self) -> None:
+        processor = InputProcessor()
+        double_escape = b"\x1b\x1b"
+        self.assertEqual(
+            processor.feed(b"teh" + double_escape + b"teh "),
+            b"teh" + double_escape + b"teh\x7f\x7f\x7fthe ",
+        )
+
+    def test_legacy_double_escape_split_across_reads_resets_typing_state(self) -> None:
+        processor = InputProcessor()
+        self.assertEqual(processor.feed(b"teh\x1b"), b"teh\x1b")
+        self.assertEqual(
+            processor.feed(b"\x1bteh "),
+            b"\x1bteh\x7f\x7f\x7fthe ",
+        )
+
+    def test_enhanced_double_escape_resets_typing_state(self) -> None:
+        processor = InputProcessor()
+        double_escape = b"\x1b[27u\x1b[27;1:3u\x1b[27u"
+        self.assertEqual(
+            processor.feed(b"teh" + double_escape + b"teh "),
+            b"teh" + double_escape + b"teh\x7f\x7f\x7fthe ",
+        )
+
+    def test_alt_key_sequence_remains_conservative(self) -> None:
+        processor = InputProcessor()
+        alt_x = b"\x1bx"
+        self.assertEqual(processor.feed(b"teh" + alt_x + b"teh "), b"teh" + alt_x + b"teh ")
+        self.assertEqual(processor.feed(b"\nteh "), b"\nteh\x7f\x7f\x7fthe ")
+
     def test_legacy_shift_tab_preserves_typing_state(self) -> None:
         processor = InputProcessor()
         shift_tab = b"\x1b[Z"
