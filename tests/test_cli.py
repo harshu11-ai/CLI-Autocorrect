@@ -6,6 +6,7 @@ from unittest.mock import patch, sentinel
 
 from cli_autocorrect.cli import _run_doctor, main
 from cli_autocorrect.config import UserConfiguration
+from cli_autocorrect.updater import UpdateError, UpdateResult
 
 
 class CliTests(unittest.TestCase):
@@ -58,6 +59,57 @@ class CliTests(unittest.TestCase):
     def test_runs_doctor_without_application(self, run_doctor) -> None:
         self.assertEqual(main(["--doctor"]), 0)
         run_doctor.assert_called_once()
+
+    @patch(
+        "cli_autocorrect.cli.update_with_pipx",
+        return_value=UpdateResult(previous_version="0.2.1", current_version="0.2.2"),
+    )
+    def test_updates_pipx_installation(self, update_with_pipx) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            result = main(["update"])
+
+        self.assertEqual(result, 0)
+        self.assertIn("Updated cli-autocorrect 0.2.1 -> 0.2.2.", stdout.getvalue())
+        update_with_pipx.assert_called_once_with()
+
+    @patch(
+        "cli_autocorrect.cli.update_with_pipx",
+        return_value=UpdateResult(previous_version="0.2.2", current_version="0.2.2"),
+    )
+    def test_reports_same_version_reinstall(self, _update_with_pipx) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            result = main(["update"])
+
+        self.assertEqual(result, 0)
+        self.assertIn("Reinstalled cli-autocorrect 0.2.2.", stdout.getvalue())
+
+    @patch(
+        "cli_autocorrect.cli.update_with_pipx",
+        side_effect=UpdateError("the running copy is not managed by pipx"),
+    )
+    def test_reports_update_failure(self, _update_with_pipx) -> None:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            result = main(["update"])
+
+        self.assertEqual(result, 1)
+        self.assertIn("update failed", stderr.getvalue())
+
+    def test_rejects_update_arguments(self) -> None:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+            main(["update", "extra"])
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("does not accept additional arguments", stderr.getvalue())
+
+    def test_rejects_update_with_wrapper_options(self) -> None:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+            main(["--no-corrections", "update"])
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("cannot be combined with wrapper options", stderr.getvalue())
 
     @patch("cli_autocorrect.cli.shutil.which", return_value=None)
     @patch("cli_autocorrect.cli.FrequencyCorrector")
