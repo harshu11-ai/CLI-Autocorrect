@@ -7,12 +7,14 @@ from dataclasses import dataclass
 from cli_autocorrect.corrector import Correction, CorrectionEngine, get_default_corrector
 
 ESCAPE = 0x1B
-BACKSPACE_BYTES = {0x08, 0x7F}
+BACKSPACE = 0x7F
+WORD_ERASE_BYTES = {0x08, 0x17}  # Ctrl-H/Ctrl-Backspace, Ctrl-W
 RESET_BYTES = {0x03, 0x04, 0x0A, 0x0D}  # Ctrl-C, Ctrl-D, LF, CR
 BOUNDARY_BYTES = {0x0A, 0x0D, 0x20}  # LF, CR, space
 BRACKETED_PASTE_START = b"\x1b[200~"
 BRACKETED_PASTE_END = b"\x1b[201~"
 KITTY_SHIFT = 1
+KITTY_ALT = 2
 KITTY_CTRL = 4
 
 
@@ -54,13 +56,18 @@ class InputProcessor:
                 output.append(byte)
                 continue
 
+            if byte in WORD_ERASE_BYTES:
+                self._reset_line()
+                output.append(byte)
+                continue
+
             if self._undo_if_requested(byte, output):
                 continue
 
             if self.last_correction is not None:
                 self.last_correction = None
 
-            if byte in BACKSPACE_BYTES:
+            if byte == BACKSPACE:
                 if self.safe_to_correct and self.token:
                     self.token.pop()
                 output.append(byte)
@@ -121,7 +128,7 @@ class InputProcessor:
 
     def _undo_if_requested(self, byte: int, output: bytearray) -> bool:
         correction = self.last_correction
-        if correction is None or byte not in BACKSPACE_BYTES:
+        if correction is None or byte != BACKSPACE:
             return False
 
         # Remove the trailing space, remove the replacement, and restore the
@@ -179,6 +186,11 @@ class InputProcessor:
                 self._escape_candidate.clear()
             return
 
+        if candidate in {b"\x1b\x08", b"\x1b\x7f"}:  # legacy Option/Ctrl-Backspace
+            self._reset_line()
+            self._escape_candidate.clear()
+            return
+
         # OSC responses include terminal color and title reports. They are
         # terminated by BEL or ST and are not user editing actions.
         if candidate.startswith(b"\x1b]"):
@@ -223,12 +235,16 @@ class InputProcessor:
 
     @classmethod
     def _is_enhanced_line_reset(cls, candidate: bytes) -> bool:
-        """Recognize Kitty-protocol keys that abandon or finish the current input."""
-        key = cls._kitty_key(candidate)
+        """Recognize enhanced keys that abandon, finish, or erase the current input."""
+        key = cls._enhanced_key(candidate)
         if key is None:
             return False
         key_code, modifiers = key
-        return key_code == ESCAPE or (key_code in {ord("c"), ord("d")} and modifiers & KITTY_CTRL)
+        if key_code == ESCAPE:
+            return True
+        if key_code in {0x08, 0x7F}:
+            return bool(modifiers & (KITTY_ALT | KITTY_CTRL))
+        return key_code in {ord("c"), ord("d"), ord("w")} and bool(modifiers & KITTY_CTRL)
 
     @classmethod
     def _is_safe_mode_key(cls, candidate: bytes) -> bool:
@@ -236,11 +252,15 @@ class InputProcessor:
         if candidate in {b"\x1b[Z", b"\x1b[1;2Z"}:  # legacy Shift-Tab
             return True
 
-        key = cls._kitty_key(candidate)
+        key = cls._enhanced_key(candidate)
         if key is None:
             return False
         key_code, modifiers = key
         return key_code == 0x09 and modifiers == KITTY_SHIFT
+
+    @classmethod
+    def _enhanced_key(cls, candidate: bytes) -> tuple[int, int] | None:
+        return cls._kitty_key(candidate) or cls._modify_other_key(candidate)
 
     @staticmethod
     def _is_mouse_motion(candidate: bytes) -> bool:
@@ -273,6 +293,16 @@ class InputProcessor:
         # Kitty encodes modifiers as one plus a bitset. The optional event type
         # follows a colon, so press, repeat, and release events parse identically.
         return int(key_code), max(int(modifier) - 1, 0)
+
+    @staticmethod
+    def _modify_other_key(candidate: bytes) -> tuple[int, int] | None:
+        """Parse an xterm modifyOtherKeys CSI 27;modifier;key~ event."""
+        if not candidate.startswith(b"\x1b[27;") or not candidate.endswith(b"~"):
+            return None
+        fields = candidate[2:-1].split(b";")
+        if len(fields) != 3 or not all(field.isdigit() for field in fields):
+            return None
+        return int(fields[2]), max(int(fields[1]) - 1, 0)
 
     def _track_paste_end(self, byte: int) -> None:
         candidate = self._paste_end_candidate

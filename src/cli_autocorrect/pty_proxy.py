@@ -40,7 +40,7 @@ def run_in_pty(
         try:
             os.execvp(command[0], list(command))
         except OSError as error:
-            message = f"cli-autocorrect: unable to launch {command[0]}: {error}\n"
+            message = f"cauto: unable to launch {command[0]}: {error}\n"
             with suppress(OSError):
                 os.write(sys.stderr.fileno(), message.encode("utf-8", errors="replace"))
             os._exit(127)

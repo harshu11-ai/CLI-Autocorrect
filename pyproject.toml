@@ -40,6 +40,8 @@ dev = [
 ]
 
 [project.scripts]
+cauto = "cli_autocorrect.cli:main"
+# Retained for one transition release so the 0.2.2 updater can verify the reinstall.
 cli-autocorrect = "cli_autocorrect.cli:main"
 
 [project.urls]

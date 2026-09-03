@@ -56,7 +56,7 @@ python -m pip install .
 Verify the installation:
 
 ```bash
-cli-autocorrect --doctor
+cauto --doctor
 ```
 
 The doctor reports the Python and platform versions, local dictionary status,
@@ -67,24 +67,30 @@ config path, terminal status, and whether `claude` and `codex` are on `PATH`.
 Launch either supported application through the wrapper:
 
 ```bash
-cli-autocorrect claude
-cli-autocorrect codex
+cauto claude
+cauto codex
 ```
 
 Arguments after the application name are passed through unchanged:
 
 ```bash
-cli-autocorrect codex --model MODEL_NAME
+cauto codex --model MODEL_NAME
 ```
 
 To test the PTY wrapper without corrections or abbreviation expansions:
 
 ```bash
-cli-autocorrect --no-corrections codex
+cauto --no-corrections codex
 ```
 
 Wrapper options such as `--config` and `--no-corrections` must come before the
 application name. Everything after `claude` or `codex` belongs to that app.
+
+Update a pipx-managed installation from GitHub with:
+
+```bash
+cauto update
+```
 
 ## Personal corrections and abbreviations
 
@@ -121,7 +127,7 @@ a shell or interpret the expansion itself. Pasted abbreviations are not expanded
 Use another file for one session with:
 
 ```bash
-cli-autocorrect --config /path/to/config.json claude
+cauto --config /path/to/config.json claude
 ```
 
 On systems that set `XDG_CONFIG_HOME`, the default file is stored beneath that

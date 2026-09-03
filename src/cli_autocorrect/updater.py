@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 PACKAGE_NAME = "cli-autocorrect"
+EXECUTABLE_NAME = "cauto"
 UPDATE_SOURCE = "git+https://github.com/harshu11-ai/CLI-Autocorrect.git"
 
 
@@ -98,7 +99,7 @@ def _find_active_installation(listing: dict[str, Any]) -> _PipxInstallation:
             continue
         for encoded_path in app_paths:
             app_path = _decode_path(encoded_path)
-            if app_path is None or app_path.name != PACKAGE_NAME:
+            if app_path is None or app_path.name != EXECUTABLE_NAME:
                 continue
             if app_path.resolve().parent.parent != active_environment:
                 continue

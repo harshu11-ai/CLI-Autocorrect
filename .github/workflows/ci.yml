@@ -64,8 +64,9 @@ jobs:
         run: |
           python -m venv /tmp/cli-autocorrect-wheel-test
           /tmp/cli-autocorrect-wheel-test/bin/pip install dist/*.whl
+          /tmp/cli-autocorrect-wheel-test/bin/cauto --version
+          /tmp/cli-autocorrect-wheel-test/bin/cauto --doctor
           /tmp/cli-autocorrect-wheel-test/bin/cli-autocorrect --version
-          /tmp/cli-autocorrect-wheel-test/bin/cli-autocorrect --doctor
       - name: Upload distributions
         uses: actions/upload-artifact@v5
         with:
