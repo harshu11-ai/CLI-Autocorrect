@@ -11,6 +11,7 @@ from cli_autocorrect import __version__
 from cli_autocorrect.config import ConfigurationError, UserConfiguration, load_configuration
 from cli_autocorrect.corrector import FrequencyCorrector
 from cli_autocorrect.pty_proxy import TerminalRequiredError, run_in_pty
+from cli_autocorrect.updater import UpdateError, update_with_pipx
 
 SUPPORTED_APPS = {"claude", "codex"}
 
@@ -39,7 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         nargs=argparse.REMAINDER,
-        help="claude or codex, followed by any arguments for that application",
+        help="update, or claude/codex followed by arguments for that application",
     )
     return parser
 
@@ -57,6 +58,13 @@ def main(argv: list[str] | None = None) -> int:
         if configuration is None:
             return 2
         return _run_doctor(configuration)
+
+    if command and command[0] == "update":
+        if len(command) != 1:
+            parser.error("'update' does not accept additional arguments")
+        if arguments.no_corrections or arguments.config is not None:
+            parser.error("'update' cannot be combined with wrapper options")
+        return _run_update()
 
     if not command:
         parser.error("provide either 'claude' or 'codex' to run")
@@ -135,6 +143,23 @@ def _run_doctor(configuration: UserConfiguration) -> int:
     if corrector.load_error is not None:
         print(f"Dictionary error: {corrector.load_error}", file=sys.stderr)
         return 1
+    return 0
+
+
+def _run_update() -> int:
+    print("Updating cli-autocorrect from GitHub with pipx...")
+    try:
+        result = update_with_pipx()
+    except UpdateError as error:
+        print(f"cli-autocorrect: update failed: {error}", file=sys.stderr)
+        return 1
+
+    if result.previous_version == result.current_version:
+        print(f"Reinstalled cli-autocorrect {result.current_version}.")
+    else:
+        print(
+            f"Updated cli-autocorrect {result.previous_version} -> {result.current_version}."
+        )
     return 0
 
 
